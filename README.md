@@ -1,6 +1,6 @@
 # rule-builder
 
-A CLI tool that keeps AI agent rule files in sync. It traverses directories, finds `.ai-rules` folders, and generates `AGENTS.md` and `Claude.md` files at each level from the rules contained within.
+A CLI tool that keeps AI agent rule files in sync. It traverses directories, finds `.ai-rules` folders, and generates `AGENTS.md` and `CLAUDE.md` files at each level from the rules contained within.
 
 ## Install
 
@@ -33,7 +33,7 @@ rule-builder
    - Reads all `.md` files in `.ai-rules/` (sorted alphabetically for deterministic output)
    - Concatenates their contents with a blank line separator
    - Writes the result to `AGENTS.md` in the same directory
-   - Copies `AGENTS.md` to `Claude.md` in the same directory
+   - Copies `AGENTS.md` to `CLAUDE.md` in the same directory
 3. Prints a summary of what was generated
 
 ### Example
@@ -58,12 +58,12 @@ my-project/
 │   ├── coding-style.md
 │   └── testing.md
 ├── AGENTS.md          ← generated (coding-style.md + testing.md)
-├── Claude.md          ← generated (copy of AGENTS.md)
+├── CLAUDE.md          ← generated (copy of AGENTS.md)
 └── backend/
     └── .ai-rules/
     │   └── api-guidelines.md
     ├── AGENTS.md      ← generated (api-guidelines.md)
-    └── Claude.md      ← generated (copy of AGENTS.md)
+    └── CLAUDE.md      ← generated (copy of AGENTS.md)
 ```
 
 Non-`.md` files in `.ai-rules/` are ignored.

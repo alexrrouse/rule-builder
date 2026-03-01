@@ -68,9 +68,9 @@ test_single_rule() {
   (cd "$dir" && "$SCRIPT_DIR/rule-builder" > /dev/null)
 
   assert_file_exists "$dir/AGENTS.md" &&
-  assert_file_exists "$dir/Claude.md" &&
+  assert_file_exists "$dir/CLAUDE.md" &&
   assert_file_contents "$dir/AGENTS.md" "$(printf '# Rule 1\nSome content')" &&
-  assert_file_contents "$dir/Claude.md" "$(printf '# Rule 1\nSome content')"
+  assert_file_contents "$dir/CLAUDE.md" "$(printf '# Rule 1\nSome content')"
 }
 
 test_multiple_rules_sorted() {
@@ -110,11 +110,11 @@ test_agents_and_claude_match() {
 
   local agents claude
   agents="$(cat "$dir/AGENTS.md")"
-  claude="$(cat "$dir/Claude.md")"
+  claude="$(cat "$dir/CLAUDE.md")"
   if [[ "$agents" == "$claude" ]]; then
     return 0
   else
-    echo "  FAIL: AGENTS.md and Claude.md differ"
+    echo "  FAIL: AGENTS.md and CLAUDE.md differ"
     return 1
   fi
 }
@@ -138,7 +138,7 @@ test_empty_ai_rules_dir() {
   (cd "$dir" && "$SCRIPT_DIR/rule-builder" > /dev/null)
 
   assert_file_not_exists "$dir/AGENTS.md" &&
-  assert_file_not_exists "$dir/Claude.md"
+  assert_file_not_exists "$dir/CLAUDE.md"
 }
 
 test_no_ai_rules_dir() {
@@ -180,7 +180,7 @@ test_overwrites_existing() {
   local dir="$TEST_DIR/t9"
   mkdir -p "$dir/.ai-rules"
   printf 'old content' > "$dir/AGENTS.md"
-  printf 'old content' > "$dir/Claude.md"
+  printf 'old content' > "$dir/CLAUDE.md"
   printf '# New rule' > "$dir/.ai-rules/rule.md"
 
   (cd "$dir" && "$SCRIPT_DIR/rule-builder" > /dev/null)
@@ -206,7 +206,7 @@ test_blank_line_separator() {
 run_test "single rule file" test_single_rule
 run_test "multiple rules sorted alphabetically" test_multiple_rules_sorted
 run_test "nested directories" test_nested_directories
-run_test "AGENTS.md and Claude.md match" test_agents_and_claude_match
+run_test "AGENTS.md and CLAUDE.md match" test_agents_and_claude_match
 run_test "ignores non-.md files" test_ignores_non_md_files
 run_test "empty .ai-rules dir skipped" test_empty_ai_rules_dir
 run_test "no .ai-rules dirs" test_no_ai_rules_dir
