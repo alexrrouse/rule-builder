@@ -1,0 +1,219 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PASS=0
+FAIL=0
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+TEST_DIR="$(mktemp -d)"
+
+cleanup() {
+  rm -rf "$TEST_DIR"
+}
+trap cleanup EXIT
+
+assert_file_exists() {
+  if [[ -f "$1" ]]; then
+    return 0
+  else
+    echo "  FAIL: expected file $1 to exist"
+    return 1
+  fi
+}
+
+assert_file_not_exists() {
+  if [[ ! -f "$1" ]]; then
+    return 0
+  else
+    echo "  FAIL: expected file $1 to NOT exist"
+    return 1
+  fi
+}
+
+assert_file_contents() {
+  local file="$1"
+  local expected="$2"
+  local actual
+  actual="$(cat "$file")"
+  if [[ "$actual" == "$expected" ]]; then
+    return 0
+  else
+    echo "  FAIL: contents of $file do not match"
+    echo "  Expected:"
+    echo "$expected" | sed 's/^/    /'
+    echo "  Actual:"
+    echo "$actual" | sed 's/^/    /'
+    return 1
+  fi
+}
+
+run_test() {
+  local name="$1"
+  shift
+  echo "TEST: $name"
+  if "$@"; then
+    echo "  PASS"
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# --- Tests ---
+
+test_single_rule() {
+  local dir="$TEST_DIR/t1"
+  mkdir -p "$dir/.ai-rules"
+  printf '# Rule 1\nSome content' > "$dir/.ai-rules/rule1.md"
+
+  (cd "$dir" && "$SCRIPT_DIR/rule-builder" > /dev/null)
+
+  assert_file_exists "$dir/AGENTS.md" &&
+  assert_file_exists "$dir/Claude.md" &&
+  assert_file_contents "$dir/AGENTS.md" "$(printf '# Rule 1\nSome content')" &&
+  assert_file_contents "$dir/Claude.md" "$(printf '# Rule 1\nSome content')"
+}
+
+test_multiple_rules_sorted() {
+  local dir="$TEST_DIR/t2"
+  mkdir -p "$dir/.ai-rules"
+  printf '# Bravo' > "$dir/.ai-rules/bravo.md"
+  printf '# Alpha' > "$dir/.ai-rules/alpha.md"
+  printf '# Charlie' > "$dir/.ai-rules/charlie.md"
+
+  (cd "$dir" && "$SCRIPT_DIR/rule-builder" > /dev/null)
+
+  local expected
+  expected="$(printf '# Alpha\n\n# Bravo\n\n# Charlie')"
+  assert_file_contents "$dir/AGENTS.md" "$expected"
+}
+
+test_nested_directories() {
+  local dir="$TEST_DIR/t3"
+  mkdir -p "$dir/.ai-rules" "$dir/sub/.ai-rules"
+  printf '# Root rule' > "$dir/.ai-rules/root.md"
+  printf '# Sub rule' > "$dir/sub/.ai-rules/sub.md"
+
+  (cd "$dir" && "$SCRIPT_DIR/rule-builder" > /dev/null)
+
+  assert_file_exists "$dir/AGENTS.md" &&
+  assert_file_exists "$dir/sub/AGENTS.md" &&
+  assert_file_contents "$dir/AGENTS.md" "$(printf '# Root rule')" &&
+  assert_file_contents "$dir/sub/AGENTS.md" "$(printf '# Sub rule')"
+}
+
+test_agents_and_claude_match() {
+  local dir="$TEST_DIR/t4"
+  mkdir -p "$dir/.ai-rules"
+  printf '# Test\nLine 1\nLine 2' > "$dir/.ai-rules/test.md"
+
+  (cd "$dir" && "$SCRIPT_DIR/rule-builder" > /dev/null)
+
+  local agents claude
+  agents="$(cat "$dir/AGENTS.md")"
+  claude="$(cat "$dir/Claude.md")"
+  if [[ "$agents" == "$claude" ]]; then
+    return 0
+  else
+    echo "  FAIL: AGENTS.md and Claude.md differ"
+    return 1
+  fi
+}
+
+test_ignores_non_md_files() {
+  local dir="$TEST_DIR/t5"
+  mkdir -p "$dir/.ai-rules"
+  printf '# Valid' > "$dir/.ai-rules/valid.md"
+  printf 'should be ignored' > "$dir/.ai-rules/notes.txt"
+  printf 'also ignored' > "$dir/.ai-rules/config.yaml"
+
+  (cd "$dir" && "$SCRIPT_DIR/rule-builder" > /dev/null)
+
+  assert_file_contents "$dir/AGENTS.md" "$(printf '# Valid')"
+}
+
+test_empty_ai_rules_dir() {
+  local dir="$TEST_DIR/t6"
+  mkdir -p "$dir/.ai-rules"
+
+  (cd "$dir" && "$SCRIPT_DIR/rule-builder" > /dev/null)
+
+  assert_file_not_exists "$dir/AGENTS.md" &&
+  assert_file_not_exists "$dir/Claude.md"
+}
+
+test_no_ai_rules_dir() {
+  local dir="$TEST_DIR/t7"
+  mkdir -p "$dir/some/nested/path"
+
+  local output
+  output="$(cd "$dir" && "$SCRIPT_DIR/rule-builder")"
+
+  if [[ "$output" == *"Generated files in 0 directories"* ]]; then
+    return 0
+  else
+    echo "  FAIL: expected 0 directories in output"
+    echo "  Got: $output"
+    return 1
+  fi
+}
+
+test_summary_count() {
+  local dir="$TEST_DIR/t8"
+  mkdir -p "$dir/a/.ai-rules" "$dir/b/.ai-rules" "$dir/c/.ai-rules"
+  printf '# A' > "$dir/a/.ai-rules/a.md"
+  printf '# B' > "$dir/b/.ai-rules/b.md"
+  printf '# C' > "$dir/c/.ai-rules/c.md"
+
+  local output
+  output="$(cd "$dir" && "$SCRIPT_DIR/rule-builder")"
+
+  if [[ "$output" == *"Generated files in 3 directories"* ]]; then
+    return 0
+  else
+    echo "  FAIL: expected 3 directories in summary"
+    echo "  Got: $output"
+    return 1
+  fi
+}
+
+test_overwrites_existing() {
+  local dir="$TEST_DIR/t9"
+  mkdir -p "$dir/.ai-rules"
+  printf 'old content' > "$dir/AGENTS.md"
+  printf 'old content' > "$dir/Claude.md"
+  printf '# New rule' > "$dir/.ai-rules/rule.md"
+
+  (cd "$dir" && "$SCRIPT_DIR/rule-builder" > /dev/null)
+
+  assert_file_contents "$dir/AGENTS.md" "$(printf '# New rule')"
+}
+
+test_blank_line_separator() {
+  local dir="$TEST_DIR/t10"
+  mkdir -p "$dir/.ai-rules"
+  printf 'First' > "$dir/.ai-rules/01.md"
+  printf 'Second' > "$dir/.ai-rules/02.md"
+
+  (cd "$dir" && "$SCRIPT_DIR/rule-builder" > /dev/null)
+
+  local expected
+  expected="$(printf 'First\n\nSecond')"
+  assert_file_contents "$dir/AGENTS.md" "$expected"
+}
+
+# --- Run all tests ---
+
+run_test "single rule file" test_single_rule
+run_test "multiple rules sorted alphabetically" test_multiple_rules_sorted
+run_test "nested directories" test_nested_directories
+run_test "AGENTS.md and Claude.md match" test_agents_and_claude_match
+run_test "ignores non-.md files" test_ignores_non_md_files
+run_test "empty .ai-rules dir skipped" test_empty_ai_rules_dir
+run_test "no .ai-rules dirs" test_no_ai_rules_dir
+run_test "summary count is correct" test_summary_count
+run_test "overwrites existing files" test_overwrites_existing
+run_test "blank line between rules" test_blank_line_separator
+
+echo ""
+echo "Results: $PASS passed, $FAIL failed out of $((PASS + FAIL)) tests"
+[[ $FAIL -eq 0 ]]

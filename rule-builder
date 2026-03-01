@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+count=0
+
+while IFS= read -r -d '' rules_dir; do
+  parent_dir="$(dirname "$rules_dir")"
+
+  # Collect sorted .md files
+  md_files=()
+  while IFS= read -r -d '' f; do
+    md_files+=("$f")
+  done < <(find "$rules_dir" -maxdepth 1 -name '*.md' -print0 | sort -z)
+
+  if [[ ${#md_files[@]} -eq 0 ]]; then
+    continue
+  fi
+
+  # Concatenate with blank line separator
+  output=""
+  for f in "${md_files[@]}"; do
+    if [[ -n "$output" ]]; then
+      output+=$'\n\n'
+    fi
+    output+="$(cat "$f")"
+  done
+
+  printf '%s\n' "$output" > "$parent_dir/AGENTS.md"
+  cp "$parent_dir/AGENTS.md" "$parent_dir/Claude.md"
+
+  count=$((count + 1))
+  echo "Generated AGENTS.md and Claude.md in $parent_dir"
+
+done < <(find . -type d -name '.ai-rules' -print0 | sort -z)
+
+echo "Done. Generated files in $count directories."
